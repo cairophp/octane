@@ -22,6 +22,7 @@ final class StartCairoCommand extends Command implements SignalableCommandInterf
                     {--max-requests=500 : The number of requests a thread serves before it is replaced}
                     {--mode= : isolated (one request per thread at a time, the default) or fibers}
                     {--concurrency=8 : In fiber mode, the requests (and booted apps) each thread runs at once}
+                    {--detect-leaks : Log static properties that a request changed but that are not request-local (development)}
                     {--binary= : The path to the cairo binary}';
 
     /** @var string */
@@ -61,6 +62,7 @@ final class StartCairoCommand extends Command implements SignalableCommandInterf
             'CAIRO_OCTANE_MAX_REQUESTS' => $this->option('max-requests'),
             'CAIRO_OCTANE_MODE' => $mode,
             'CAIRO_OCTANE_CONCURRENCY' => $this->option('concurrency'),
+            'CAIRO_OCTANE_DETECT_LEAKS' => $this->option('detect-leaks') || config('octane.cairo.detect_leaks') ? '1' : '',
             'CAIRO_OCTANE_PUBLIC_PATH' => public_path(),
         ], null, null);
         $this->server->start();

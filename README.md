@@ -20,6 +20,7 @@ extension, as with every Octane server.
 |---|---|---|
 | `--mode` | `isolated` | `isolated` or `fibers` (also `octane.cairo.mode` in `config/octane.php`) |
 | `--concurrency` | `8` | In fiber mode, the requests each PHP thread runs at once |
+| `--detect-leaks` | off | Log static properties that a request changed but that are not request-local (`App::detectLeaks()`; also `octane.cairo.detect_leaks`). For development |
 | `--binary` | `cairo` on `PATH` | The Cairo binary |
 
 Files under `public/` are served by Cairo (Go) and every other path goes to
@@ -47,16 +48,23 @@ waits on I/O (the database, HTTP calls, `sleep()`), the others run. Octane's
 per-request sandbox is a shallow clone, so requests cannot share one booted
 app: each request in flight on a thread takes its own booted app from that
 thread's pool (booted on first need, up to `--concurrency`), with its own
-database connections. Laravel's static properties that belong to an app (the
-container instance, facades, Eloquent's resolver and dispatcher and booted
-models, the paginator's resolvers) are made request-local with
-`Cairo\RequestLocal` and kept per app.
+database connections. The static properties that belong to an app are made
+request-local with `Cairo\RequestLocal` and kept per app: a fixed list (the
+container instance, facades, Eloquent's resolver, dispatcher and booted
+models, the paginator's resolvers) and every static that booting the
+thread's first app changed, found when the server starts. On a new Laravel
+13 app that is 40 statics, among them the exception handler's app,
+`Request::$macros`, the auth middleware's redirect callbacks and
+`Uri::$urlGeneratorResolver`, which service providers set while the app
+boots.
 
 Fiber mode needs Cairo 0.5 or later. Memory grows with `--concurrency`: one
-booted app per request in flight per thread. It is new: test your app with it
-first. Packages that keep request state in their own static properties need
-them registered with `Cairo\RequestLocal`, and output that a request
-`echo`es (rather than returning a response) is not supported in this mode.
+booted app per request in flight per thread. It is new: test your app with
+it first, with `--detect-leaks` on and a load that runs several requests at
+once. The detector logs any static that a request changed and that is not
+kept per request, such as a package's static set from the request; register
+those with `Cairo\RequestLocal`. Output that a request `echo`es (rather than
+returning a response) is not supported in this mode.
 
 ## Not supported yet
 
