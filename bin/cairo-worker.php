@@ -30,6 +30,14 @@ $app = new App();
 $app->threads((int) getenv('CAIRO_OCTANE_WORKERS') ?: 'auto');
 $app->concurrency($fibers ? 'fibers' : 'isolated');
 $app->maxRequests((int) (getenv('CAIRO_OCTANE_MAX_REQUESTS') ?: 500));
+if (getenv('CAIRO_OCTANE_DETECT_LEAKS')) {
+    if (!method_exists($app, 'detectLeaks')) {
+        throw new RuntimeException('--detect-leaks needs Cairo 0.5 or later (App::detectLeaks())');
+    }
+    // In isolated mode the app statics change on every request: Octane's
+    // sandbox sets them for each one.
+    $app->detectLeaks(ignore: $fibers ? [] : AppStatics::names());
+}
 
 $http = $app->http((getenv('CAIRO_OCTANE_HOST') ?: '127.0.0.1') . ':' . (getenv('CAIRO_OCTANE_PORT') ?: '8000'));
 if (($public = getenv('CAIRO_OCTANE_PUBLIC_PATH')) && method_exists($http, 'publicDir')) {
@@ -45,7 +53,6 @@ if ($fibers) {
     if (!class_exists(\Cairo\RequestLocal::class)) {
         throw new RuntimeException('fiber mode needs Cairo 0.5 or later (Cairo\\RequestLocal)');
     }
-    AppStatics::register();
     $app->maxInFlight((int) (getenv('CAIRO_OCTANE_CONCURRENCY') ?: 8));
     $pool = new WorkerPool($basePath, $client);
     $http->fallback(static function (Request $req) use ($pool, $client, $fail): Response {

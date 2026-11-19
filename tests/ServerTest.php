@@ -54,7 +54,7 @@ final class ServerTest extends TestCase
 
     public function testFiberModeRunsRequestsAtOnceWithTheirOwnState(): void
     {
-        $this->start('fibers');
+        $this->start('fibers', '--detect-leaks');
         $n = 40;
         $multi = curl_multi_init();
         $handles = [];
@@ -75,6 +75,8 @@ final class ServerTest extends TestCase
         }
         // 40 requests waiting 100 ms each, 8 at a time on one thread.
         self::assertLessThan(2.0, $took, sprintf('took %.2fs: requests did not overlap', $took));
+        // Each of the 8 apps set its statics when it booted: all are its own.
+        self::assertStringNotContainsString('static changed by a request', self::$server->getOutput() . self::$server->getErrorOutput());
     }
 
     protected function tearDown(): void
@@ -83,7 +85,7 @@ final class ServerTest extends TestCase
         self::$server = null;
     }
 
-    private function start(string $mode): void
+    private function start(string $mode, string ...$options): void
     {
         $app = getenv('CAIRO_OCTANE_TEST_APP');
         $binary = getenv('CAIRO_BINARY');
@@ -92,7 +94,7 @@ final class ServerTest extends TestCase
         }
         $port = self::freePort();
         self::$base = "http://127.0.0.1:{$port}";
-        self::$server = new Process([PHP_BINARY, 'artisan', 'octane:cairo', "--port={$port}", '--workers=1', "--mode={$mode}", "--binary={$binary}"], $app);
+        self::$server = new Process([PHP_BINARY, 'artisan', 'octane:cairo', "--port={$port}", '--workers=1', "--mode={$mode}", "--binary={$binary}", ...$options], $app);
         self::$server->start();
         $deadline = microtime(true) + 30;
         while (@file_get_contents(self::$base . '/octane-test/hello') !== 'hello') {

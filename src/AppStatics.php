@@ -7,13 +7,19 @@ namespace Cairo\Octane;
 use Cairo\RequestLocal;
 
 /**
- * Laravel's static properties that belong to one booted app, for fiber mode.
+ * The static properties that belong to one booted app, for fiber mode.
  *
  * In fiber mode a PHP thread runs several requests at once, each on its own
- * booted app (see WorkerPool). These statics are request-local
+ * booted app (see WorkerPool). Laravel and its packages keep some of an app's
+ * state in statics: the facade root, Eloquent's booted models, and closures
+ * that service providers set while the app boots (Uri::$urlGeneratorResolver,
+ * Request::$macros and so on). These are made request-local
  * (Cairo\RequestLocal), so each request sees its own values, and each app
  * keeps its own copy between requests: restore() puts an app's values in
  * place when a request starts, save() keeps them when it ends.
+ *
+ * They are the statics in PROPERTIES, which an app sets while it runs, and
+ * every static that booting the first app changed (discover()).
  */
 final class AppStatics
 {
@@ -28,29 +34,60 @@ final class AppStatics
         \Illuminate\Support\Number::class => ['locale', 'currency'],
     ];
 
-    /** Makes the statics request-local; call it in server.php. */
-    public static function register(): void
+    /** @var list<\ReflectionProperty> */
+    private static array $reflected = [];
+    /** @var list<mixed> each one's value before any app booted */
+    private static array $defaults = [];
+
+    /** @return list<string> "Class::$property" of PROPERTIES, as App::detectLeaks() names them */
+    public static function names(): array
     {
+        $names = [];
         foreach (self::PROPERTIES as $class => $properties) {
-            if (class_exists($class)) {
-                RequestLocal::register($class, ...$properties);
+            foreach ($properties as $property) {
+                $names[] = $class . '::$' . $property;
             }
         }
+        return $names;
     }
 
-    /** @var list<\ReflectionProperty>|null */
-    private static ?array $reflected = null;
+    /**
+     * Runs $boot, which boots the first app, and makes PROPERTIES and every
+     * static it changed request-local. Call it in server.php.
+     *
+     * @template T
+     * @param callable(): T $boot
+     * @return T
+     */
+    public static function discover(callable $boot): mixed
+    {
+        foreach (array_keys(self::PROPERTIES) as $class) {
+            class_exists($class);   // loaded now, so that it is seen
+        }
+        $before = self::statics();
+        $booted = $boot();
+        foreach (self::statics() as $name => [$property]) {
+            $was = isset($before[$name]) ? $before[$name][1] : $property->getDefaultValue();
+            $listed = in_array($property->getName(), self::PROPERTIES[$property->getDeclaringClass()->getName()] ?? [], true);
+            if ($listed || $property->getValue() !== $was) {
+                RequestLocal::register($property->getDeclaringClass()->getName(), $property->getName());
+                self::$reflected[] = $property;
+                self::$defaults[] = $was;
+            }
+        }
+        return $booted;
+    }
 
-    /** @return list<mixed> the current request's values, in PROPERTIES order */
+    /** @return list<mixed> the current request's values */
     public static function save(): array
     {
-        return array_map(static fn (\ReflectionProperty $p): mixed => $p->getValue(), self::reflected());
+        return array_map(static fn (\ReflectionProperty $p): mixed => $p->getValue(), self::$reflected);
     }
 
     /** @param list<mixed> $values from save() */
     public static function restore(array $values): void
     {
-        foreach (self::reflected() as $i => $p) {
+        foreach (self::$reflected as $i => $p) {
             $p->setValue(null, $values[$i]);
         }
     }
@@ -58,20 +95,28 @@ final class AppStatics
     /** @return list<mixed> the values before any app booted */
     public static function defaults(): array
     {
-        return array_map(static fn (\ReflectionProperty $p): mixed => $p->getDefaultValue(), self::reflected());
+        return self::$defaults;
     }
 
-    /** @return list<\ReflectionProperty> */
-    private static function reflected(): array
+    /**
+     * The initialized static properties of the app's classes, each where it
+     * is declared. Cairo's are left out: they are not an app's.
+     *
+     * @return array<string, array{0: \ReflectionProperty, 1: mixed}>
+     */
+    private static function statics(): array
     {
-        if (self::$reflected === null) {
-            self::$reflected = [];
-            foreach (self::PROPERTIES as $class => $properties) {
-                foreach (class_exists($class) ? $properties : [] as $property) {
-                    self::$reflected[] = new \ReflectionProperty($class, $property);
+        $statics = [];
+        foreach (get_declared_classes() as $class) {
+            if (str_starts_with($class, 'Cairo\\') || (new \ReflectionClass($class))->getFileName() === false) {
+                continue;
+            }
+            foreach ((new \ReflectionClass($class))->getProperties(\ReflectionProperty::IS_STATIC) as $property) {
+                if ($property->getDeclaringClass()->getName() === $class && $property->isInitialized()) {
+                    $statics[$class . '::$' . $property->getName()] = [$property, $property->getValue()];
                 }
             }
         }
-        return self::$reflected;
+        return $statics;
     }
 }

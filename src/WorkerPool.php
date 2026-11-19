@@ -20,14 +20,20 @@ final class WorkerPool
     /** @var list<array{0: Worker, 1: list<mixed>}> */
     private array $idle = [];
 
+    /** Boots the thread's first app, and with it makes the app statics request-local: call it in server.php. */
     public function __construct(private readonly string $basePath, private readonly CairoClient $client)
     {
+        $this->idle[] = [AppStatics::discover(fn (): Worker => $this->boot()), AppStatics::save()];
     }
 
     /** @return array{0: Worker, 1: list<mixed>} */
     public function take(): array
     {
-        return array_pop($this->idle) ?? $this->boot();
+        if ($this->idle !== []) {
+            return array_pop($this->idle);
+        }
+        AppStatics::restore(AppStatics::defaults());
+        return [$this->boot(), AppStatics::save()];
     }
 
     /** @param list<mixed> $statics */
@@ -36,12 +42,10 @@ final class WorkerPool
         $this->idle[] = [$worker, $statics];
     }
 
-    /** @return array{0: Worker, 1: list<mixed>} */
-    private function boot(): array
+    private function boot(): Worker
     {
-        AppStatics::restore(AppStatics::defaults());
         $worker = new Worker(new ApplicationFactory($this->basePath), $this->client);
         $worker->boot([DispatchesTasks::class => new CairoTaskDispatcher()]);
-        return [$worker, AppStatics::save()];
+        return $worker;
     }
 }
