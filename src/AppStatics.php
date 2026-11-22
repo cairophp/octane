@@ -81,7 +81,11 @@ final class AppStatics
     /** @return list<mixed> the current request's values */
     public static function save(): array
     {
-        return array_map(static fn (\ReflectionProperty $p): mixed => $p->getValue(), self::$reflected);
+        $values = [];
+        foreach (self::$reflected as $p) {
+            $values[] = $p->getValue();
+        }
+        return $values;
     }
 
     /** @param list<mixed> $values from save() */

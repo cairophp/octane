@@ -40,3 +40,17 @@ Route::get('/octane-test/mixed/{id}', function (int $id) {
         'db' => (int) DB::selectOne('select ? as id', [$id])->id,
     ];
 });
+
+// The thread that answers: a function's static is the thread's, whichever of
+// its apps runs the request, and a new thread starts without it.
+if (!function_exists('octane_test_thread')) {
+    function octane_test_thread(): int
+    {
+        static $id;
+        return $id ??= hrtime(true);
+    }
+}
+Route::get('/octane-test/thread/{ms}', function (int $ms) {
+    usleep($ms * 1000);
+    return ['thread' => octane_test_thread()];
+});

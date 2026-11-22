@@ -29,7 +29,11 @@ $client = new CairoClient();
 $app = new App();
 $app->threads((int) getenv('CAIRO_OCTANE_WORKERS') ?: 'auto');
 $app->concurrency($fibers ? 'fibers' : 'isolated');
-$app->maxRequests((int) (getenv('CAIRO_OCTANE_MAX_REQUESTS') ?: 500));
+// Octane counts --max-requests for each worker, which is one booted app, and
+// a thread in fiber mode has one for each request it runs at once.
+$concurrency = $fibers ? (int) (getenv('CAIRO_OCTANE_CONCURRENCY') ?: 8) : 1;
+$maxRequests = getenv('CAIRO_OCTANE_MAX_REQUESTS');
+$app->maxRequests(($maxRequests === false || $maxRequests === '' ? 500 : (int) $maxRequests) * $concurrency);
 if (getenv('CAIRO_OCTANE_DETECT_LEAKS')) {
     if (!method_exists($app, 'detectLeaks')) {
         throw new RuntimeException('--detect-leaks needs Cairo 0.5 or later (App::detectLeaks())');
@@ -53,7 +57,7 @@ if ($fibers) {
     if (!class_exists(\Cairo\RequestLocal::class)) {
         throw new RuntimeException('fiber mode needs Cairo 0.5 or later (Cairo\\RequestLocal)');
     }
-    $app->maxInFlight((int) (getenv('CAIRO_OCTANE_CONCURRENCY') ?: 8));
+    $app->maxInFlight($concurrency);
     $pool = new WorkerPool($basePath, $client);
     $http->fallback(static function (Request $req) use ($pool, $client, $fail): Response {
         [$worker, $statics] = $pool->take();
