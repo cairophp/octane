@@ -23,6 +23,14 @@ extension, as with every Octane server.
 | `--detect-leaks` | off | Log static properties that a request changed but that are not request-local (`App::detectLeaks()`; also `octane.cairo.detect_leaks`). For development |
 | `--binary` | `cairo` on `PATH` | The Cairo binary |
 
+`--max-requests` (500 unless you say otherwise, 0 for never) is how many
+requests one booted app serves before its PHP thread is replaced by a fresh
+one, as it is for a worker on Octane's other servers. In fiber mode a thread
+holds `--concurrency` apps, so it is replaced after `--max-requests` times
+`--concurrency` requests (under a light load its first apps serve most of
+them). A thread that is replaced serves until the new one has booted your
+app, so no request waits for the boot.
+
 Files under `public/` are served by Cairo (Go) and every other path goes to
 Laravel, as with FrankenPHP's Caddy. PHP files and hidden files are never
 served.

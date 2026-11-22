@@ -79,6 +79,28 @@ final class ServerTest extends TestCase
         self::assertStringNotContainsString('static changed by a request', self::$server->getOutput() . self::$server->getErrorOutput());
     }
 
+    public function testIsolatedModeReplacesAThreadAfterMaxRequests(): void
+    {
+        $this->start('isolated', '--max-requests=3');
+        self::assertNotNull($this->servedByOneThread(50, 400), 'the thread was never replaced');
+    }
+
+    public function testFiberModeCountsMaxRequestsForEachApp(): void
+    {
+        // One thread with 4 apps: replaced after 3 x 4 requests, one of
+        // which the start has made.
+        $this->start('fibers', '--max-requests=3', '--concurrency=4');
+        $served = $this->servedByOneThread(100, 200);
+        self::assertNotNull($served, 'the thread was never replaced');
+        self::assertGreaterThanOrEqual(11, $served);
+    }
+
+    public function testMaxRequestsOfZeroNeverReplacesAThread(): void
+    {
+        $this->start('isolated', '--max-requests=0');
+        self::assertNull($this->servedByOneThread(2, 700));
+    }
+
     protected function tearDown(): void
     {
         self::$server?->stop(10);
@@ -120,6 +142,22 @@ final class ServerTest extends TestCase
         [$status, $body] = $this->get($path);
         self::assertSame(200, $status, $body);
         return json_decode($body, true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * How many requests in a row, each waiting $ms, the thread that answers
+     * the first one answers before another thread does; null when it
+     * answered all $most.
+     */
+    private function servedByOneThread(int $ms, int $most): ?int
+    {
+        $first = $this->json("/octane-test/thread/{$ms}")['thread'];
+        for ($n = 1; $n < $most; $n++) {
+            if ($this->json("/octane-test/thread/{$ms}")['thread'] !== $first) {
+                return $n;
+            }
+        }
+        return null;
     }
 
     private static function freePort(): int
