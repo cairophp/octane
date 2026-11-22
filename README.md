@@ -66,6 +66,36 @@ thread's first app changed, found when the server starts. On a new Laravel
 `Uri::$urlGeneratorResolver`, which service providers set while the app
 boots.
 
+### Choosing `--concurrency`
+
+A thread runs up to `--concurrency` requests at once, so the server holds
+`--workers` times `--concurrency` requests in flight and the rest wait in
+Cairo for a free app. The default of 8 suits requests that mostly compute.
+Raise it when your requests mostly wait (slow queries, calls to other
+services): how many of them fit in the wait is what limits the server then.
+
+A page with two Eloquent queries and two HTTP calls to another service, on 2
+CPUs with 256 connections (Laravel 13, PHP 8.5; requests per second, and
+the memory of the server once every app has booted):
+
+| | Calls answer in 20 ms | Calls answer in 200 ms | Memory |
+|---|---:|---:|---:|
+| isolated, 40 workers | 534 | 95 | 207 MB |
+| fibers, 4 workers x 8 | 540 | 76 | 136 MB |
+| fibers, 4 x 16 | 565 | 150 | 165 MB |
+| fibers, 4 x 32 | 505 | 296 | 264 MB |
+| fibers, 4 x 64 | 442 | 527 | 364 MB |
+| fibers, 8 x 8 | 548 | 153 | 177 MB |
+
+With the 20 ms calls the CPUs are the limit, and more requests at once only
+share them: at 64 the page is 18% slower than at 8 and its 99th percentile
+doubles (528 ms to 1030 ms). With the 200 ms calls the wait is the limit, and
+each doubling of `--concurrency` doubles the requests per second. Each app
+costs 1 to 1.5 MB here and holds its own database connections, so
+`--workers` times `--concurrency` must stay under your database's connection
+limit. An app is booted when a request first needs it, so a thread that is
+never that busy never pays for the apps it does not use.
+
 Fiber mode needs Cairo 0.5 or later. Memory grows with `--concurrency`: one
 booted app per request in flight per thread. It is new: test your app with
 it first, with `--detect-leaks` on and a load that runs several requests at
