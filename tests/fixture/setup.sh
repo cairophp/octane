@@ -7,6 +7,6 @@ pkg=$(cd "$(dirname "$0")/../.." && pwd)
 composer create-project laravel/laravel "$dir" --no-interaction --quiet
 cd "$dir"
 composer config repositories.cairo-octane "{\"type\":\"path\",\"url\":\"$pkg\",\"options\":{\"symlink\":true}}"
-composer require laravel/octane cairophp/octane:@dev --no-interaction --quiet
+composer require laravel/octane cairophp/laravel-octane:@dev --no-interaction --quiet
 printf 'User-agent: *\n' > public/robots.txt
 printf "\nrequire '%s/tests/fixture/routes.php';\n" "$pkg" >> routes/web.php

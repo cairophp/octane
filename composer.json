@@ -1,5 +1,5 @@
 {
-    "name": "cairophp/octane",
+    "name": "cairophp/laravel-octane",
     "description": "Run Laravel Octane on the Cairo application server",
     "type": "library",
     "license": "Apache-2.0",
