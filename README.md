@@ -10,7 +10,9 @@ php artisan octane:start --server=cairo
 
 Put the `cairo` binary on your `PATH` or in the project root, or pass
 `--binary=/path/to/cairo` to `octane:cairo`. Octane's commands need the `pcntl`
-extension, as with every Octane server.
+extension, as with every Octane server. Isolated mode runs on Cairo 0.4 or
+later; fiber mode, `--detect-leaks` and serving `public/` from Go need Cairo
+0.5.
 
 `octane:start --server=cairo` (or `OCTANE_SERVER=cairo`) takes Octane's usual
 `--host`, `--port`, `--workers` and `--max-requests`; `octane:stop` and
