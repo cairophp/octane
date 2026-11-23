@@ -1,10 +1,10 @@
-# cairophp/octane
+# cairophp/laravel-octane
 
 Run [Laravel Octane](https://laravel.com/docs/octane) on the
 [Cairo](https://github.com/cairophp/cairo) application server:
 
 ```sh
-composer require laravel/octane cairophp/octane
+composer require laravel/octane cairophp/laravel-octane
 php artisan octane:start --server=cairo
 ```
 
