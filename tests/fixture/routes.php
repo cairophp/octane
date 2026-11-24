@@ -69,3 +69,7 @@ Route::get('/octane-test/events', fn () => response()->eventStream(function () {
     yield 'two';
 }));
 Route::get('/octane-test/download', fn () => response()->download(base_path('composer.json')));
+
+// What app/ReloadProbe.php says, a file the reload tests write and change:
+// a worker keeps the class it loaded until it is replaced.
+Route::get('/octane-test/probe', fn () => class_exists(\App\ReloadProbe::class) ? \App\ReloadProbe::VALUE : 'none');

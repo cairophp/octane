@@ -19,6 +19,7 @@ final class StartCommand extends OctaneStartCommand
             '--port' => $this->getPort(),
             '--workers' => $this->option('workers') ?: config('octane.workers', 'auto'),
             '--max-requests' => $this->option('max-requests') ?: config('octane.max_requests', 500),
+            '--watch' => $this->option('watch') ?: null,
         ], static fn ($v) => $v !== null));
     }
 }

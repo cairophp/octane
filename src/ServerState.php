@@ -6,7 +6,7 @@ namespace Cairo\Octane;
 
 use Symfony\Component\Process\Process;
 
-/** The running server's process id and address, for octane:stop and octane:status. */
+/** The running server's process id and address, for octane:stop, octane:reload and octane:status. */
 final class ServerState
 {
     public function __construct(private readonly string $path)
@@ -39,15 +39,30 @@ final class ServerState
 
     public function stop(): bool
     {
+        // SIGTERM: Cairo drains its requests, then exits.
+        if ($this->signal(15)) {
+            return true;
+        }
+        $this->delete();
+        return false;
+    }
+
+    /** Has the server replace its PHP threads with ones that read the code anew. */
+    public function reload(): bool
+    {
+        return $this->signal(defined('SIGUSR1') ? SIGUSR1 : 10);
+    }
+
+    private function signal(int $signal): bool
+    {
         $pid = $this->read()['pid'] ?? 0;
         if ($pid <= 0 || !$this->running()) {
-            $this->delete();
             return false;
         }
         if (function_exists('posix_kill')) {
-            return posix_kill($pid, 15);   // SIGTERM: Cairo drains its requests, then exits
+            return posix_kill($pid, $signal);
         }
-        return (new Process(['kill', '-TERM', (string) $pid]))->run() === 0;
+        return (new Process(['kill', "-{$signal}", (string) $pid]))->run() === 0;
     }
 
     public function delete(): void

@@ -120,10 +120,63 @@ final class ServerTest extends TestCase
         self::assertNull($this->servedByOneThread(2, 700));
     }
 
+    #[DataProvider('modes')]
+    public function testReloadGivesTheWorkersNewCode(string $mode): void
+    {
+        $this->probe('one', time() - 10);
+        $this->start($mode);
+        self::assertSame('one', $this->get('/octane-test/probe')[1]);
+
+        $this->probe('two', time());
+        self::assertSame('one', $this->get('/octane-test/probe')[1], 'a worker keeps the code it has loaded');
+        $reload = new Process([PHP_BINARY, 'artisan', 'octane:reload', '--server=cairo'], (string) getenv('CAIRO_OCTANE_TEST_APP'));
+        self::assertSame(0, $reload->run(), $reload->getOutput() . $reload->getErrorOutput());
+        $this->waitForProbe('two');
+        self::assertSame(['user' => null], $this->json('/octane-test/whoami'));
+    }
+
+    #[DataProvider('modes')]
+    public function testWatchReloadsWhenAFileChanges(string $mode): void
+    {
+        $this->probe('one', time() - 10);
+        $this->start($mode, '--watch');
+        self::assertSame('one', $this->get('/octane-test/probe')[1]);
+        $this->probe('two', time());
+        $this->waitForProbe('two');
+    }
+
     protected function tearDown(): void
     {
         self::$server?->stop(10);
         self::$server = null;
+        $probe = getenv('CAIRO_OCTANE_TEST_APP') . '/app/ReloadProbe.php';
+        if (is_file($probe)) {
+            unlink($probe);
+        }
+    }
+
+    /** Writes app/ReloadProbe.php with $value, changed at $time. */
+    private function probe(string $value, int $time): void
+    {
+        $app = getenv('CAIRO_OCTANE_TEST_APP');
+        if (!$app) {
+            self::markTestSkipped('set CAIRO_OCTANE_TEST_APP (see tests/fixture/setup.sh) and CAIRO_BINARY');
+        }
+        $file = $app . '/app/ReloadProbe.php';
+        file_put_contents($file . '.next', "<?php\n\nnamespace App;\n\nfinal class ReloadProbe\n{\n    public const VALUE = '{$value}';\n}\n");
+        touch($file . '.next', $time);
+        rename($file . '.next', $file);
+    }
+
+    private function waitForProbe(string $value): void
+    {
+        $deadline = microtime(true) + 15;
+        while (($got = $this->get('/octane-test/probe')[1]) !== $value) {
+            if (microtime(true) > $deadline) {
+                self::fail("the workers still answer '{$got}', not '{$value}':\n" . self::$server?->getOutput() . self::$server?->getErrorOutput());
+            }
+            usleep(50_000);
+        }
     }
 
     private function start(string $mode, string ...$options): void
