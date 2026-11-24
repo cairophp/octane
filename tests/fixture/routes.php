@@ -54,3 +54,18 @@ Route::get('/octane-test/thread/{ms}', function (int $ms) {
     usleep($ms * 1000);
     return ['thread' => octane_test_thread()];
 });
+
+// Responses that are sent while they are made: the client has the first
+// part while the callback still works on the second.
+Route::get('/octane-test/stream', fn () => response()->stream(function () {
+    echo "part 1\n";
+    flush();
+    usleep(300_000);
+    echo 'part 2 for ' . (auth()->id() ?? 'nobody') . "\n";
+}, 200, ['Content-Type' => 'text/plain']));
+Route::get('/octane-test/events', fn () => response()->eventStream(function () {
+    yield 'one';
+    usleep(300_000);
+    yield 'two';
+}));
+Route::get('/octane-test/download', fn () => response()->download(base_path('composer.json')));

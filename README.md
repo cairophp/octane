@@ -106,6 +106,15 @@ kept per request, such as a package's static set from the request; register
 those with `Cairo\RequestLocal`. Output that a request `echo`es (rather than
 returning a response) is not supported in this mode.
 
+## Streamed responses
+
+`response()->stream()`, `response()->eventStream()` and
+`response()->download()` reach the client while they are made, in both
+modes. This needs a Cairo with streamed answers, which is the release after
+0.5; an older one sends them whole at the end. A stream holds its worker
+until it ends in isolated mode, and one of the thread's `--concurrency`
+places in fiber mode.
+
 ## Not supported yet
 
 - `octane:reload` and `--watch`.
