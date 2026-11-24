@@ -52,6 +52,25 @@ final class ServerTest extends TestCase
         self::assertSame(500, $this->get('/octane-test/timeout')[0], 'a task past its wait ends the request');
     }
 
+    #[DataProvider('modes')]
+    public function testStreamedResponsesArriveWhileTheyAreMade(string $mode): void
+    {
+        $this->start($mode);
+        [$early, $body] = $this->timed('/octane-test/stream');
+        self::assertSame("part 1\npart 2 for nobody\n", $body);
+        self::assertLessThan(0.25, $early, 'the first part waited for the second');
+
+        [$early, $body] = $this->timed('/octane-test/events');
+        self::assertStringStartsWith("event: update\ndata: one\n\nevent: update\ndata: two\n\n", $body);
+        self::assertLessThan(0.25, $early, 'the first event waited for the second');
+
+        $file = (string) file_get_contents(getenv('CAIRO_OCTANE_TEST_APP') . '/composer.json');
+        self::assertSame([200, $file], $this->get('/octane-test/download'));
+        self::assertSame([206, substr($file, 3, 5)], $this->get('/octane-test/download', ['Range: bytes=3-7']));
+        // The app that streamed is as clean for the next request as any.
+        self::assertSame(['user' => null], $this->json('/octane-test/whoami'));
+    }
+
     public function testFiberModeRunsRequestsAtOnceWithTheirOwnState(): void
     {
         $this->start('fibers', '--detect-leaks');
@@ -127,13 +146,33 @@ final class ServerTest extends TestCase
         }
     }
 
-    /** @return array{0: int, 1: string} status and body */
-    private function get(string $path): array
+    /**
+     * @param list<string> $headers
+     * @return array{0: int, 1: string} status and body
+     */
+    private function get(string $path, array $headers = []): array
     {
         $h = curl_init(self::$base . $path);
         curl_setopt($h, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($h, CURLOPT_HTTPHEADER, $headers);
         $body = (string) curl_exec($h);
         return [(int) curl_getinfo($h, CURLINFO_RESPONSE_CODE), $body];
+    }
+
+    /** @return array{0: float, 1: string} the seconds until the body's first bytes, and the body */
+    private function timed(string $path): array
+    {
+        $start = microtime(true);
+        $early = null;
+        $body = '';
+        $h = curl_init(self::$base . $path);
+        curl_setopt($h, CURLOPT_WRITEFUNCTION, static function ($h, string $piece) use (&$early, &$body, $start): int {
+            $early ??= microtime(true) - $start;
+            $body .= $piece;
+            return strlen($piece);
+        });
+        curl_exec($h);
+        return [(float) $early, $body];
     }
 
     /** @return array<string, mixed> */
