@@ -15,8 +15,10 @@ final class CairoOctaneServiceProvider extends ServiceProvider
             config('octane.state_file', storage_path('logs/octane-server-state.json'))
         ));
         // Artisan resolves Octane's commands from the container, so these
-        // bindings add --server=cairo to octane:start, octane:stop and octane:status.
+        // bindings add --server=cairo to octane:start, octane:reload,
+        // octane:stop and octane:status.
         $this->app->bind(Octane\StartCommand::class, Commands\StartCommand::class);
+        $this->app->bind(Octane\ReloadCommand::class, Commands\ReloadCommand::class);
         $this->app->bind(Octane\StopCommand::class, Commands\StopCommand::class);
         $this->app->bind(Octane\StatusCommand::class, Commands\StatusCommand::class);
     }

@@ -23,6 +23,7 @@ final class StartCairoCommand extends Command implements SignalableCommandInterf
                     {--mode= : isolated (one request per thread at a time, the default) or fibers}
                     {--concurrency=8 : In fiber mode, the requests (and booted apps) each thread runs at once}
                     {--detect-leaks : Log static properties that a request changed but that are not request-local (development)}
+                    {--watch : Reload the workers when a file of the application changes (development)}
                     {--binary= : The path to the cairo binary}';
 
     /** @var string */
@@ -52,7 +53,7 @@ final class StartCairoCommand extends Command implements SignalableCommandInterf
         $host = $this->option('host') ?? config('octane.host') ?? $_ENV['OCTANE_HOST'] ?? '127.0.0.1';
         $port = $this->option('port') ?? config('octane.port') ?? $_ENV['OCTANE_PORT'] ?? '8000';
 
-        $this->server = new Process([$this->binary(), 'serve', dirname(__DIR__, 2) . '/bin/cairo-worker.php'], base_path(), [
+        $this->server = new Process([$this->binary(), 'serve', dirname(__DIR__, 2) . '/bin/cairo-worker.php', ...$this->watch()], base_path(), [
             'APP_ENV' => app()->environment(),
             'APP_BASE_PATH' => base_path(),
             'LARAVEL_OCTANE' => 1,
@@ -89,6 +90,29 @@ final class StartCairoCommand extends Command implements SignalableCommandInterf
     {
         $this->server?->signal(SIGTERM);
         return false;   // keep running until Cairo has drained its requests
+    }
+
+    /**
+     * With --watch, a --watch-path for each entry of config('octane.watch').
+     * Cairo watches a directory with what is under it, so an entry such as
+     * "config/**\/*.php" is its directory, and what does not exist is left
+     * out. Cairo does the watching itself: no Node, no chokidar.
+     *
+     * @return list<string>
+     */
+    private function watch(): array
+    {
+        if (!$this->option('watch')) {
+            return [];
+        }
+        $paths = [];
+        foreach ((array) config('octane.watch', ['app', 'bootstrap', 'config', 'database', 'public', 'resources', 'routes', 'composer.lock', '.env']) as $entry) {
+            $path = base_path(rtrim((string) preg_replace('~[^/]*[*?\[{].*$~', '', (string) $entry), '/'));
+            if (file_exists($path)) {
+                $paths[$path] = "--watch-path={$path}";
+            }
+        }
+        return array_values($paths);
     }
 
     private function binary(): string

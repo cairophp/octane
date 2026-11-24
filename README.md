@@ -115,9 +115,41 @@ modes. This needs a Cairo with streamed answers, which is the release after
 until it ends in isolated mode, and one of the thread's `--concurrency`
 places in fiber mode.
 
+## Reloading the code
+
+A worker keeps the code it has loaded, so new code needs new workers:
+
+```sh
+php artisan octane:reload --server=cairo        # after a deploy
+php artisan octane:start --server=cairo --watch # in development
+```
+
+`octane:reload` has Cairo replace each PHP thread with one that has booted
+the app anew. No request is refused or fails: a thread serves until its
+replacement is ready, and finishes the requests it holds with the code they
+began with. The first new thread is tried alone, so code that does not boot
+(a syntax error, an exception in a service provider) replaces nothing: the
+server runs on with the code it has, and the error is in its output.
+
+`--watch` does that whenever a file of the app changes. Cairo does the
+watching itself, so it needs no Node and no chokidar: it looks at the files'
+times every 250 ms, which also works in a directory shared with a container
+(Octane's `--poll` is not needed). What is watched comes from the `watch`
+list of `config/octane.php`; of an entry with a pattern, such as
+`config/**/*.php`, Cairo takes the directory, and watches the `*.php`,
+`*.twig`, `*.yaml`, `*.yml`, `.env*` and `composer.lock` files under it.
+
+A changed `.env` needs a new process, because the values that Laravel has
+put in the process's environment stay there: `--watch` restarts the server
+in place for it, and after a deploy that changes `.env`, stop and start the
+server instead of `octane:reload`.
+
+This needs a Cairo with `cairo serve --watch` and the reload signal, which
+is the release after 0.5. An older one stops at `octane:reload` (the signal
+ends it) and does not start with `--watch`.
+
 ## Not supported yet
 
-- `octane:reload` and `--watch`.
 - HTTPS in the server itself (put Cairo behind a proxy that ends TLS, or use
   Cairo's own `server.php` with TLS).
 
