@@ -110,8 +110,8 @@ returning a response) is not supported in this mode.
 
 `response()->stream()`, `response()->eventStream()` and
 `response()->download()` reach the client while they are made, in both
-modes. This needs a Cairo with streamed answers, which is the release after
-0.5; an older one sends them whole at the end. A stream holds its worker
+modes. This needs Cairo 0.6 or later; an older one sends them whole at the
+end. A stream holds its worker
 until it ends in isolated mode, and one of the thread's `--concurrency`
 places in fiber mode.
 
@@ -144,8 +144,8 @@ put in the process's environment stay there: `--watch` restarts the server
 in place for it, and after a deploy that changes `.env`, stop and start the
 server instead of `octane:reload`.
 
-This needs a Cairo with `cairo serve --watch` and the reload signal, which
-is the release after 0.5. An older one stops at `octane:reload` (the signal
+This needs Cairo 0.6 or later, which has `cairo serve --watch` and the
+reload signal. An older one stops at `octane:reload` (the signal
 ends it) and does not start with `--watch`.
 
 ## Not supported yet
